@@ -7,7 +7,7 @@ def test_injector_skips_empty_text():
     mock_keyboard = MagicMock()
     mock_clipboard = MagicMock()
 
-    injector = TextInjector(keyboard_controller=mock_keyboard, clipboard=mock_clipboard)
+    injector = TextInjector(keyboard_controller=mock_keyboard)
     injector.paste_text("")
     injector.paste_text("   ")
 
@@ -16,26 +16,26 @@ def test_injector_skips_empty_text():
     mock_keyboard.press.assert_not_called()
 
 
-def test_injector_preserves_and_restores_clipboard():
-    mock_keyboard = MagicMock()
-    mock_clipboard = MagicMock()
+def test_injector_keeps_nontext_clipboard_untouched():
+    keyboard = MagicMock()
+    clipboard = MagicMock()
+    injector = TextInjector(keyboard_controller=keyboard)
 
-    mock_clipboard.paste.return_value = "old clipboard content"
+    assert injector.paste_text("Tiếng Việt") is True
+    keyboard.type.assert_called_once_with("Tiếng Việt")
+    clipboard.paste.assert_not_called()
+    clipboard.copy.assert_not_called()
 
-    injector = TextInjector(
-        keyboard_controller=mock_keyboard,
-        clipboard=mock_clipboard,
-        restore_delay=0.01
-    )
 
-    injector.paste_text("new transcribed text")
+def test_injector_does_not_send_transcript_line_breaks_as_enter():
+    keyboard = MagicMock()
+    injector = TextInjector(keyboard_controller=keyboard)
 
-    # Verify new text was copied to clipboard
-    mock_clipboard.copy.assert_any_call("new transcribed text")
+    assert injector.paste_text("git status\nrm -rf /\tmore") is True
+    keyboard.type.assert_called_once_with("git status rm -rf / more")
 
-    # Verify Ctrl+V was simulated
-    assert mock_keyboard.press.call_count >= 2
-    assert mock_keyboard.release.call_count >= 2
 
-    # Verify old content was restored
-    mock_clipboard.copy.assert_called_with("old clipboard content")
+def test_injector_reports_typing_failure():
+    keyboard = MagicMock()
+    keyboard.type.side_effect = RuntimeError("input blocked")
+    assert TextInjector(keyboard_controller=keyboard).paste_text("text") is False

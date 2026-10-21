@@ -1,11 +1,8 @@
 from dataclasses import dataclass
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
-
-# Load .env if present
-env_path = Path(__file__).parent.parent / ".env"
-load_dotenv(dotenv_path=env_path)
 
 
 @dataclass
@@ -24,6 +21,8 @@ class Config:
 
 def load_config() -> Config:
     """Load configuration from environment variables with sensible defaults."""
+    app_dir = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent.parent
+    load_dotenv(app_dir / ".env", override=False)
     api_key = os.getenv("GROQ_API_KEY", "").strip()
     model = os.getenv("GROQ_MODEL", "whisper-large-v3-turbo").strip()
     lang = os.getenv("LANGUAGE", "vi").strip()

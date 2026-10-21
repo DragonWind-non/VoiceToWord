@@ -19,6 +19,8 @@ def test_clean_transcription_regular_sentences():
     assert clean_transcription("Xin chào mọi người.") == "Xin chào mọi người."
     assert clean_transcription("Hôm nay trời đẹp không?") == "Hôm nay trời đẹp không?"
     assert clean_transcription("   đoạn văn bản có khoảng trắng   ") == "đoạn văn bản có khoảng trắng"
+    assert clean_transcription("Direction is important.") == "Direction is important."
+    assert clean_transcription("Clear the table.") == "Clear the table."
 
 
 def test_transcriber_requires_valid_key():

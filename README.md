@@ -6,12 +6,12 @@ Công cụ Desktop chạy ngầm trên Windows chuyển giọng nói thành văn
 
 ## 🚀 Tính năng nổi bật
 
-- **Tốc độ phản hồi cực nhanh (<0.5 giây):** Sử dụng chip LPU của Groq Cloud (`whisper-large-v3-turbo`) cho kết quả gần như tức thì khi dứt lời.
-- **Tiết kiệm tài nguyên tuyệt đối:** Xử lý âm thanh trực tiếp trong RAM (`io.BytesIO`), không ghi file rác I/O ra ổ cứng. Chiếm < 40MB RAM và ~0% CPU khi chạy nền.
+- **Nhận diện qua Groq Cloud:** Dùng `whisper-large-v3-turbo`; thời gian phản hồi phụ thuộc thời lượng ghi âm, mạng và tải dịch vụ, không cam kết dưới 0,5 giây.
+- **Không lưu bản ghi âm xuống đĩa:** Âm thanh được tạo thành WAV trong RAM; RAM/CPU khi chạy nền phụ thuộc môi trường và chưa được đo.
 - **Push-to-Talk (Nhấn giữ để nói):** Bấm giữ phím `Right Ctrl` (Ctrl bên phải) để thu âm, buông phím là chữ tự động điền vào màn hình.
 - **Không cướp tiêu điểm (Focus):** Badge overlay hiển thị ở cạnh dưới màn hình sử dụng thuộc tính Windows `WS_EX_NOACTIVATE`, không làm mất con trỏ chuột/dòng lệnh bạn đang gõ.
 - **Tự động làm sạch lệnh CLI:** Tự động loại bỏ dấu chấm câu thừa nếu bạn đọc các câu lệnh lập trình (như `git status`, `docker ps`, `npm run dev`).
-- **Bảo toàn Clipboard:** Tự động lưu trữ nội dung clipboard cũ của bạn và phục hồi lại ngay sau khi dán chữ xong.
+- **Không thay đổi Clipboard:** Gõ Unicode trực tiếp vào cửa sổ đang hoạt động; phím tắt `Right Ctrl` cũng được ứng dụng đích nhận như phím Ctrl thông thường.
 - **Hỗ trợ khay hệ thống (System Tray):** Biểu tượng nằm gọn ở góc đồng hồ Windows, cho phép kiểm tra trạng thái hoặc thoát app nhanh chóng bằng chuột phải.
 
 ---
@@ -23,9 +23,9 @@ Công cụ Desktop chạy ngầm trên Windows chuyển giọng nói thành văn
 2. Bấm **Create API Key**, đặt tên bất kỳ và copy mã khóa (dạng `gsk_...`).
 
 ### 2. Cấu hình file `.env`
-Tạo file `.env` từ file mẫu `.env.example`:
-```bash
-cp .env.example .env
+Tạo file `.env` từ file mẫu `.env.example` (PowerShell):
+```powershell
+Copy-Item .env.example .env
 ```
 Mở `.env` và dán key của bạn vào:
 ```env
@@ -35,6 +35,9 @@ GROQ_API_KEY=test-key
 ---
 
 ## 💻 Cách sử dụng
+
+Cài Python 3.10+ và các thư viện bằng `python -m pip install -r requirements.txt`.
+Không gửi API key cho người khác; âm thanh sẽ được gửi qua mạng đến Groq để phiên âm.
 
 ### Cách 1: Chạy trực tiếp qua Python
 - **Chế độ có cửa sổ hiển thị log:**
@@ -52,7 +55,7 @@ Bạn có thể đóng gói toàn bộ app thành một file `.exe` duy nhất (
 pip install pyinstaller
 pyinstaller --noconsole --onefile --name VoiceToWord run.py
 ```
-File thực thi sẽ nằm tại thư mục `dist/VoiceToWord.exe`. Bạn chỉ cần bấm đúp chuột để chạy hoặc copy vào thư mục `Startup` (`Win + R` -> gõ `shell:startup`) để tự khởi động cùng Windows!
+File thực thi sẽ nằm tại `dist/VoiceToWord.exe`. Đặt file `.env` **cạnh file `.exe`** (ứng dụng không tự nhúng API key). Bạn có thể tạo lối tắt của `.exe` trong `shell:startup` nếu muốn tự khởi động. Chưa xác nhận bản build `.exe` trên máy này.
 
 ---
 
@@ -61,12 +64,14 @@ File thực thi sẽ nằm tại thư mục `dist/VoiceToWord.exe`. Bạn chỉ 
 2. **Bấm và giữ** phím `Right Ctrl` (Ctrl bên phải bàn phím).
 3. Biểu tượng **🔴 Đang nghe...** sẽ xuất hiện ở cạnh dưới màn hình.
 4. Nói câu bạn muốn nhập (tiếng Việt hoặc tiếng Anh).
-5. **Buông phím `Right Ctrl`**: Biểu tượng chuyển sang **⏳ Đang nhận diện...** và văn bản sẽ lập tức được dán ngay vào vị trí con trỏ!
+5. **Buông phím `Right Ctrl`**: Biểu tượng chuyển sang **⏳ Đang nhận diện...**, sau đó ứng dụng gõ kết quả tại vị trí con trỏ đang hoạt động. Hãy giữ focus ở cửa sổ cần nhập trong khi đợi API phản hồi; ứng dụng không tự nhấn Enter để chạy lệnh.
+
+Cửa sổ PowerShell/CMD chạy quyền Administrator có thể chặn thao tác nhập từ ứng dụng chạy quyền thông thường (UIPI); chỉ chạy VoiceToWord với cùng quyền nếu thực sự cần. Chưa kiểm chứng đường đi này trên máy hiện tại.
 
 ---
 
 ## 🧪 Chạy Kiểm thử (Tests)
-Toàn bộ mã nguồn được xây dựng theo chuẩn TDD với 20 unit & integration tests:
+Chạy các kiểm thử đơn vị và tích hợp:
 ```bash
 python -m pytest -v
 ```

@@ -37,6 +37,19 @@ def test_load_config_from_env(monkeypatch):
     assert config.min_duration == 0.5
 
 
+def test_load_config_reads_env_beside_packaged_executable(monkeypatch, tmp_path):
+    import sys
+    import src.config as module
+
+    exe = tmp_path / "VoiceToWord.exe"
+    (tmp_path / ".env").write_text("GROQ_API_KEY=test-key\n", encoding="utf-8")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(exe))
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+
+    assert module.load_config().groq_api_key == "test-key"
+
+
 def test_config_is_valid():
     cfg_invalid = Config(groq_api_key="")
     assert not cfg_invalid.is_valid()

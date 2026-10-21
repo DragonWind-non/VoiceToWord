@@ -13,8 +13,8 @@ class TranscribeError(Exception):
 CLI_COMMAND_PREFIXES = (
     "git ", "docker ", "npm ", "pnpm ", "yarn ", "pip ", "cd ", "ls ", "dir ",
     "cat ", "python ", "python3 ", "curl ", "kubectl ", "ssh ", "node ", "deno ",
-    "bun ", "go ", "cargo ", "rustc ", "code ", "vim ", "nano ", "clear", "cls",
-    "dir", "ls", "pwd", "exit"
+    "bun ", "go ", "cargo ", "rustc ", "code ", "vim ", "nano ",
+    "cls", "dir", "ls", "pwd", "exit"
 )
 
 
@@ -28,7 +28,7 @@ def clean_transcription(text: str) -> str:
 
     is_cli = False
     # Check if starts with a known CLI command
-    if any(lower_text == prefix.strip() or lower_text.startswith(prefix) for prefix in CLI_COMMAND_PREFIXES):
+    if any(lower_text.rstrip(".") == prefix.strip() or lower_text.startswith(prefix.strip() + " ") for prefix in CLI_COMMAND_PREFIXES):
         is_cli = True
     # Or contains typical command flags (e.g., -a, --help)
     elif re.search(r"\s+-[a-zA-Z0-9]|\s+--[a-zA-Z0-9]", lower_text):

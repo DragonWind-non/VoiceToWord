@@ -1,5 +1,5 @@
 import io
-import sys
+import logging
 import threading
 import time
 from typing import Optional
@@ -11,6 +11,9 @@ from src.injector import TextInjector
 from src.overlay import OverlayIndicator
 from src.transcriber import Transcriber, TranscribeError
 from src.tray import TrayManager
+
+
+log = logging.getLogger(__name__)
 
 
 class VoiceToWordApp:
@@ -41,25 +44,43 @@ class VoiceToWordApp:
         )
 
         self._is_running = False
+        self._busy = False
+        self._recording = False
+        self._state_lock = threading.Lock()
 
     def on_hotkey_press(self) -> None:
         """Triggered when the push-to-talk hotkey is pressed down."""
+        with self._state_lock:
+            if self._busy or self._recording:
+                return
+            self._recording = True
         self.overlay.show_recording()
         try:
             self.recorder.start()
         except Exception as e:
+            with self._state_lock:
+                self._recording = False
             self.overlay.show_error(f"Lỗi Micro: {e}")
 
     def on_hotkey_release(self) -> None:
         """Triggered when the push-to-talk hotkey is released."""
+        with self._state_lock:
+            if not self._recording:
+                return
+            self._recording = False
+            self._busy = True
         try:
             audio_buffer, duration = self.recorder.stop()
         except Exception as e:
+            with self._state_lock:
+                self._busy = False
             self.overlay.show_error(f"Lỗi ghi âm: {e}")
             return
 
         # Debounce: If user merely tapped the key briefly (< min_duration), cancel
         if duration < self.config.min_duration:
+            with self._state_lock:
+                self._busy = False
             self.overlay.hide()
             return
 
@@ -78,14 +99,19 @@ class VoiceToWordApp:
         try:
             text = self.transcriber.transcribe(audio_buffer)
             if text:
-                self.injector.paste_text(text)
+                if not self.injector.paste_text(text):
+                    self.overlay.show_error("Không thể nhập văn bản vào cửa sổ hiện tại")
+                    return
             self.overlay.hide()
         except TranscribeError as e:
-            print(f"[VoiceToWord] Transcribe error: {e}")
+            log.error("Transcription failed: %s", e)
             self.overlay.show_error(str(e))
         except Exception as e:
-            print(f"[VoiceToWord] Unexpected error: {e}")
+            log.error("VoiceToWord processing failed: %s", e)
             self.overlay.show_error(f"Lỗi: {e}")
+        finally:
+            with self._state_lock:
+                self._busy = False
 
     def start(self) -> None:
         """Start all services (hotkey listener, tray icon, overlay)."""
@@ -95,11 +121,7 @@ class VoiceToWordApp:
         if not self.headless:
             self.tray.start()
 
-        print(f"[VoiceToWord] Đã khởi động thành công!")
-        print(f"[VoiceToWord] - Phím kích hoạt: Giữ phím [{self.config.hotkey.upper()}] để nói")
-        print(f"[VoiceToWord] - Mô hình AI: {self.config.model_name}")
-        print(f"[VoiceToWord] - Ngôn ngữ: {self.config.language}")
-        print(f"[VoiceToWord] - Ứng dụng đang chạy ngầm trong System Tray (khay hệ thống).")
+        log.info("VoiceToWord started; hold %s to record", self.config.hotkey)
 
     def stop(self) -> None:
         """Gracefully stop all services and exit."""
@@ -108,18 +130,22 @@ class VoiceToWordApp:
         self.recorder.stop()
         self.overlay.stop()
         self.tray.stop()
-        print("[VoiceToWord] Đã dừng ứng dụng.")
+        log.info("VoiceToWord stopped")
+
+
+def notify_missing_key():
+    import ctypes
+    ctypes.windll.user32.MessageBoxW(
+        0, "Copy .env.example to .env and set GROQ_API_KEY before starting.",
+        "VoiceToWord - Configuration required", 0x10,
+    )
 
 
 def main():
     config = load_config()
     if not config.is_valid():
-        print("=" * 60)
-        print("LƯU Ý QUAN TRỌNG: Bạn chưa cấu hình GROQ_API_KEY!")
-        print("Vui lòng mở file .env (hoặc copy từ .env.example) và điền:")
-        print("GROQ_API_KEY=test-key")
-        print("Lấy key miễn phí trong 10 giây tại: https://console.groq.com/keys")
-        print("=" * 60)
+        notify_missing_key()
+        raise SystemExit("GROQ_API_KEY is missing. Copy .env.example to .env and configure it.")
 
     app = VoiceToWordApp(config=config)
     app.start()

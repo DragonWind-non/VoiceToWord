@@ -34,6 +34,7 @@ class OverlayIndicator:
         self.headless = headless or (tk is None)
         self.state = OverlayState.HIDDEN
         self.last_error: str = ""
+        self._error_version = 0
         self._queue: queue.Queue = queue.Queue()
         self._thread: Optional[threading.Thread] = None
         self._root = None
@@ -150,7 +151,13 @@ class OverlayIndicator:
             )
             self._show_no_activate()
             # Auto hide error after 1.5s
-            self._root.after(1500, self._render_hide)
+            version = self._error_version
+            self._root.after(1500, lambda: self._hide_if_error(version))
+
+    def _hide_if_error(self, version):
+        if self.state == OverlayState.ERROR and version == self._error_version:
+            self.hide()
+            self._render_hide()
 
     def _render_hide(self):
         if self._root:
@@ -168,6 +175,7 @@ class OverlayIndicator:
             self._queue.put(("PROCESSING", None))
 
     def show_error(self, message: str):
+        self._error_version += 1
         self.state = OverlayState.ERROR
         self.last_error = message
         if not self.headless:

@@ -6,7 +6,7 @@ Công cụ chạy ngầm trên Windows chuyển giọng nói thành văn bản s
 - `src/config.py`: Đọc cấu hình từ `.env` (Groq API Key, hotkey, language, audio settings).
 - `src/audio_recorder.py`: Thu âm micro trực tiếp vào bộ nhớ RAM (`io.BytesIO`), không tạo file rác ra đĩa.
 - `src/transcriber.py`: Gửi audio stream tới Groq Whisper Cloud API (`whisper-large-v3-turbo`), tự động chuẩn hóa chuỗi lệnh CLI.
-- `src/injector.py`: Nhập văn bản an toàn vào cửa sổ hiện hành qua Clipboard kèm cơ chế tự khôi phục nội dung cũ và mô phỏng phím `Ctrl+V`.
+- `src/injector.py`: Gõ Unicode trực tiếp vào cửa sổ hiện hành, không thay đổi clipboard.
 - `src/overlay.py`: Hiển thị icon/pill trạng thái ghi âm nổi ở cạnh dưới màn hình với cờ Win32 `WS_EX_NOACTIVATE` để không cướp focus.
 - `src/tray.py`: Quản lý icon ở System Tray (khay hệ thống) cạnh đồng hồ để bật/tắt hoặc thoát app.
 - `src/hotkey_listener.py`: Lắng nghe sự kiện nhấn/nhả `Right Ctrl` toàn cục không làm ảnh hưởng phím khác.
@@ -14,7 +14,7 @@ Công cụ chạy ngầm trên Windows chuyển giọng nói thành văn bản s
 - `run.py`: Script khởi chạy nhanh không hiện màn hình console đen (hoặc đóng gói `.exe`).
 
 ## Lệnh thực thi & Kiểm thử
-- Chạy toàn bộ test: `pytest`
-- Chạy từng test: `pytest tests/test_config.py -v`
+- Chạy toàn bộ test: `python -m pytest`
+- Chạy từng test: `python -m pytest tests/test_config.py -v`
 - Khởi chạy app ở chế độ phát triển: `python run.py`
 - Cấu hình: Tạo file `.env` từ `.env.example` và điền `GROQ_API_KEY`.
