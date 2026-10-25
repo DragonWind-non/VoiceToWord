@@ -29,22 +29,32 @@ SW_HIDE = 0
 
 
 def _setup_user32() -> None:
-    user32 = ctypes.windll.user32
-    user32.GetParent.argtypes = [wintypes.HWND]
-    user32.GetParent.restype = wintypes.HWND
-    user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
-    user32.ShowWindow.restype = wintypes.BOOL
+    user32 = getattr(getattr(ctypes, "windll", None), "user32", None)
+    if user32 is None:
+        return
+    if hasattr(user32, "GetParent"):
+        user32.GetParent.argtypes = [wintypes.HWND]
+        user32.GetParent.restype = wintypes.HWND
+    if hasattr(user32, "ShowWindow"):
+        user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+        user32.ShowWindow.restype = wintypes.BOOL
 
     if hasattr(user32, "GetWindowLongPtrW"):
         user32.GetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int]
         user32.GetWindowLongPtrW.restype = ctypes.c_ssize_t
         user32.SetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t]
         user32.SetWindowLongPtrW.restype = ctypes.c_ssize_t
-    else:
+    elif hasattr(user32, "GetWindowLongW"):
         user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
         user32.GetWindowLongW.restype = ctypes.c_long
         user32.SetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_long]
         user32.SetWindowLongW.restype = ctypes.c_long
+
+
+try:
+    _setup_user32()
+except Exception:
+    pass
 
 
 def _get_window_long_ptr(hwnd: int, index: int) -> int:
@@ -161,7 +171,6 @@ class OverlayIndicator:
         if not self._root:
             return
         try:
-            _setup_user32()
             hwnd = ctypes.windll.user32.GetParent(self._root.winfo_id())
             if not hwnd:
                 hwnd = self._root.winfo_id()

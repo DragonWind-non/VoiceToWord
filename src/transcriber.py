@@ -50,7 +50,7 @@ def clean_transcription(text: str) -> str:
     elif re.search(r"\s+-[a-zA-Z0-9]|\s+--[a-zA-Z0-9]", lower_text):
         is_cli = True
 
-    if is_cli and cleaned.endswith(".") and not cleaned.endswith(" ."):
+    if is_cli and cleaned.endswith(".") and not cleaned.endswith("..") and not cleaned.endswith(" ."):
         cleaned = cleaned[:-1].strip()
 
     return cleaned
@@ -100,10 +100,11 @@ class Transcriber:
                 kept = []
                 for segment in segments:
                     # Match Whisper's silence rule; never filter by the words themselves.
-                    silent = (segment.get("no_speech_prob", 0) > 0.6
-                              and segment.get("avg_logprob", 0) < -1.0)
+                    no_speech = segment.get("no_speech_prob") if isinstance(segment, dict) else getattr(segment, "no_speech_prob", None)
+                    avg_log = segment.get("avg_logprob") if isinstance(segment, dict) else getattr(segment, "avg_logprob", None)
+                    silent = ((no_speech or 0.0) > 0.6 and (avg_log or 0.0) < -1.0)
                     if not silent:
-                        part = segment.get("text")
+                        part = segment.get("text") if isinstance(segment, dict) else getattr(segment, "text", None)
                         if isinstance(part, str) and part.strip():
                             kept.append(part.strip())
                 if len(kept) != len(segments):

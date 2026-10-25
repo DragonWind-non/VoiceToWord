@@ -11,6 +11,8 @@ def test_clean_transcription_cli_commands():
     assert clean_transcription("npm run dev.") == "npm run dev"
     assert clean_transcription("python -m pytest.") == "python -m pytest"
     assert clean_transcription("cd /var/log.") == "cd /var/log"
+    assert clean_transcription("cd ..") == "cd .."
+    assert clean_transcription("cd ../..") == "cd ../.."
     assert clean_transcription("dir.") == "dir"
     assert clean_transcription("cls.") == "cls"
     assert clean_transcription("go run main.go.") == "go run main.go"
@@ -37,6 +39,7 @@ def test_transcribe_handles_segments_with_missing_or_none_text():
     mock_transcription = MagicMock()
     mock_transcription.text = "fallback text"
     mock_transcription.segments = [
+        {"no_speech_prob": None, "avg_logprob": None},
         {"no_speech_prob": 0.01, "avg_logprob": -0.1},
         {"text": None, "no_speech_prob": 0.01, "avg_logprob": -0.1},
         {"text": "valid command", "no_speech_prob": 0.01, "avg_logprob": -0.1},

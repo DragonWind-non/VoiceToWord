@@ -100,6 +100,10 @@ class VoiceToWordApp:
                 log.info("Recording skipped: too short or below silence threshold")
                 return
 
+            with self._state_lock:
+                if self._stopping:
+                    self._busy = False
+                    return
             self.overlay.show_processing()
             self._process_and_inject(audio_buffer)
         except Exception as e:

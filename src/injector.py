@@ -44,6 +44,36 @@ class GUITHREADINFO(ctypes.Structure):
     ]
 
 
+def _setup_user32() -> None:
+    user32 = getattr(getattr(ctypes, "windll", None), "user32", None)
+    if user32 is None:
+        return
+    if hasattr(user32, "SendInput"):
+        user32.SendInput.argtypes = (wintypes.UINT, ctypes.c_void_p, ctypes.c_int)
+        user32.SendInput.restype = wintypes.UINT
+    if hasattr(user32, "GetGUIThreadInfo"):
+        user32.GetGUIThreadInfo.argtypes = (wintypes.DWORD, ctypes.POINTER(GUITHREADINFO))
+        user32.GetGUIThreadInfo.restype = wintypes.BOOL
+    if hasattr(user32, "GetClassNameW"):
+        user32.GetClassNameW.argtypes = (wintypes.HWND, wintypes.LPWSTR, ctypes.c_int)
+        user32.GetClassNameW.restype = ctypes.c_int
+    if hasattr(user32, "IsWindowUnicode"):
+        user32.IsWindowUnicode.argtypes = (wintypes.HWND,)
+        user32.IsWindowUnicode.restype = wintypes.BOOL
+    if hasattr(user32, "SendMessageTimeoutW"):
+        user32.SendMessageTimeoutW.argtypes = (
+            wintypes.HWND, wintypes.UINT, ctypes.c_size_t, ctypes.c_void_p,
+            wintypes.UINT, wintypes.UINT, ctypes.POINTER(ctypes.c_size_t),
+        )
+        user32.SendMessageTimeoutW.restype = ctypes.c_ssize_t
+
+
+try:
+    _setup_user32()
+except Exception:
+    pass
+
+
 class TextInjector:
     def __init__(self, debug_transcript: bool = False):
         self.debug_transcript = debug_transcript
@@ -52,31 +82,21 @@ class TextInjector:
         user32 = ctypes.windll.user32
         if not hasattr(user32, "GetGUIThreadInfo"):
             return None
-        user32.GetGUIThreadInfo.argtypes = (wintypes.DWORD, ctypes.POINTER(GUITHREADINFO))
-        user32.GetGUIThreadInfo.restype = wintypes.BOOL
+        _setup_user32()
         info = GUITHREADINFO(cbSize=ctypes.sizeof(GUITHREADINFO))
         if not user32.GetGUIThreadInfo(0, ctypes.byref(info)) or not info.hwndFocus:
             return None
-        user32.GetClassNameW.argtypes = (wintypes.HWND, wintypes.LPWSTR, ctypes.c_int)
-        user32.GetClassNameW.restype = ctypes.c_int
         name = ctypes.create_unicode_buffer(256)
         if not user32.GetClassNameW(info.hwndFocus, name, len(name)):
             return None
         control = name.value.lower()
         if control != "edit" and not control.startswith("richedit"):
             return None
-        user32.IsWindowUnicode.argtypes = (wintypes.HWND,)
-        user32.IsWindowUnicode.restype = wintypes.BOOL
         if not user32.IsWindowUnicode(info.hwndFocus):
             return None
         current = GUITHREADINFO(cbSize=ctypes.sizeof(GUITHREADINFO))
         if not user32.GetGUIThreadInfo(0, ctypes.byref(current)) or current.hwndFocus != info.hwndFocus:
             return False
-        user32.SendMessageTimeoutW.argtypes = (
-            wintypes.HWND, wintypes.UINT, ctypes.c_size_t, ctypes.c_void_p,
-            wintypes.UINT, wintypes.UINT, ctypes.POINTER(ctypes.c_size_t),
-        )
-        user32.SendMessageTimeoutW.restype = ctypes.c_ssize_t
         buffer = ctypes.create_unicode_buffer(text)
         result = ctypes.c_size_t()
         # RichEdit corrupted queued VK_PACKET input in live tests; insert at its caret directly.
@@ -106,6 +126,7 @@ class TextInjector:
             return False
         if inserted is not None:
             return inserted
+        _setup_user32()
         total_events = len(units)
         events = (INPUT * total_events)()
         idx = 0

@@ -67,6 +67,7 @@ class AudioRecorder:
             return True
         frame_size = max(1, round(self.sample_rate * 0.02))
         active_samples = 0
+        min_active_samples = round(self.sample_rate * 0.1)
         threshold_ratio = 10 ** (threshold_dbfs / 20)
         for offset in range(0, len(data), frame_size):
             frame = data[offset:offset + frame_size].astype(np.float32)
@@ -74,8 +75,10 @@ class AudioRecorder:
             rms = np.sqrt(np.mean(frame * frame)) / 32768.0
             if rms > threshold_ratio:
                 active_samples += len(frame)
+                if active_samples >= min_active_samples:
+                    return False
         # shortcut: energy cannot distinguish loud background noise from speech; calibrate on the real microphone.
-        return active_samples < round(self.sample_rate * 0.1)
+        return True
 
     def _export_wav_buffer(self) -> Tuple[io.BytesIO, float]:
         """Convert collected frames to an in-memory WAV buffer."""

@@ -1,5 +1,9 @@
+import logging
 from typing import Callable, Optional
 from pynput.keyboard import Key, KeyCode, Listener
+
+
+log = logging.getLogger(__name__)
 
 
 KEY_MAP = {
@@ -53,7 +57,7 @@ class HotkeyListener:
                 try:
                     self.on_press()
                 except Exception as e:
-                    print(f"[HotkeyListener] on_press callback error: {e}")
+                    log.error("Hotkey on_press callback error: %s", e)
 
     def _handle_release(self, key) -> None:
         """Called whenever any key is released."""
@@ -63,7 +67,7 @@ class HotkeyListener:
                 try:
                     self.on_release()
                 except Exception as e:
-                    print(f"[HotkeyListener] on_release callback error: {e}")
+                    log.error("Hotkey on_release callback error: %s", e)
 
     def start(self) -> None:
         """Start listening for keyboard events in a background thread."""
