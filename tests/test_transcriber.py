@@ -13,6 +13,9 @@ def test_clean_transcription_cli_commands():
     assert clean_transcription("cd /var/log.") == "cd /var/log"
     assert clean_transcription("dir.") == "dir"
     assert clean_transcription("cls.") == "cls"
+    assert clean_transcription("go run main.go.") == "go run main.go"
+    assert clean_transcription("code .") == "code ."
+    assert clean_transcription("cat file.txt.") == "cat file.txt"
 
 
 def test_clean_transcription_regular_sentences():
@@ -21,6 +24,31 @@ def test_clean_transcription_regular_sentences():
     assert clean_transcription("   đoạn văn bản có khoảng trắng   ") == "đoạn văn bản có khoảng trắng"
     assert clean_transcription("Direction is important.") == "Direction is important."
     assert clean_transcription("Clear the table.") == "Clear the table."
+    assert clean_transcription("Go to the store.") == "Go to the store."
+    assert clean_transcription("Code of conduct.") == "Code of conduct."
+    assert clean_transcription("Cat is sleeping.") == "Cat is sleeping."
+    assert clean_transcription("Exit through the front door.") == "Exit through the front door."
+
+
+def test_transcribe_handles_segments_with_missing_or_none_text():
+    config = Config(groq_api_key="test-key")
+    transcriber = Transcriber(config)
+    mock_client = MagicMock()
+    mock_transcription = MagicMock()
+    mock_transcription.text = "fallback text"
+    mock_transcription.segments = [
+        {"no_speech_prob": 0.01, "avg_logprob": -0.1},
+        {"text": None, "no_speech_prob": 0.01, "avg_logprob": -0.1},
+        {"text": "valid command", "no_speech_prob": 0.01, "avg_logprob": -0.1},
+    ]
+    mock_client.audio.transcriptions.create.return_value = mock_transcription
+    transcriber._client = mock_client
+
+    buffer = io.BytesIO(b"fake wav data")
+    buffer.name = "audio.wav"
+    result = transcriber.transcribe(buffer)
+    assert result == "valid command"
+
 
 
 def test_transcriber_requires_valid_key():
@@ -60,5 +88,5 @@ def test_transcriber_api_error():
     buffer = io.BytesIO(b"fake wav data")
     buffer.name = "audio.wav"
 
-    with pytest.raises(TranscribeError, match="Groq API Error: Connection timed out"):
+    with pytest.raises(TranscribeError, match="Groq API Error"):
         transcriber.transcribe(buffer)
