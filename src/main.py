@@ -4,7 +4,7 @@ import logging
 import sys
 import threading
 import time
-from typing import Optional
+from typing import Iterator, Optional
 from contextlib import contextmanager
 from ctypes import wintypes
 
@@ -173,7 +173,7 @@ class VoiceToWordApp:
 
 
 @contextmanager
-def single_instance():
+def single_instance() -> Iterator[None]:
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel.CreateMutexW.argtypes = (ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR)
     kernel.CreateMutexW.restype = wintypes.HANDLE
@@ -190,17 +190,17 @@ def single_instance():
         kernel.CloseHandle(handle)
 
 
-def notify_error(message: str):
+def notify_error(message: str) -> None:
     ctypes.windll.user32.MessageBoxW(
         0, message, "VoiceToWord", 0x10,
     )
 
 
-def notify_missing_key():
+def notify_missing_key() -> None:
     notify_error("Copy .env.example to .env and set GROQ_API_KEY before starting.")
 
 
-def main():
+def main() -> None:
     config = load_config()
     if sys.stderr is not None:
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")

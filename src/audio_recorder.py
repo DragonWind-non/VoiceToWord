@@ -1,7 +1,7 @@
 import io
 import time
 import wave
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 import numpy as np
 import sounddevice as sd
 
@@ -16,7 +16,13 @@ class AudioRecorder:
         self._stream: Optional[sd.InputStream] = None
         self._audio_error: str = ""
 
-    def _audio_callback(self, indata, frames_count, time_info, status):
+    def _audio_callback(
+        self,
+        indata: np.ndarray,
+        frames_count: int,
+        time_info: Any,
+        status: Any,
+    ) -> None:
         """Callback from sounddevice InputStream."""
         if self.is_recording:
             if status and getattr(status, "input_overflow", False):
