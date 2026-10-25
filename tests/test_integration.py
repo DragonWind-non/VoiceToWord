@@ -12,6 +12,7 @@ def test_app_lifecycle_success():
     config = Config(groq_api_key="test-key", min_duration=0.3)
 
     mock_recorder = MagicMock()
+    mock_recorder.is_silent.return_value = False
     mock_transcriber = MagicMock()
     mock_injector = MagicMock()
 
@@ -48,6 +49,7 @@ def test_app_debounce_under_min_duration():
     config = Config(groq_api_key="test-key", min_duration=0.3)
 
     mock_recorder = MagicMock()
+    mock_recorder.is_silent.return_value = False
     mock_transcriber = MagicMock()
     mock_injector = MagicMock()
 
@@ -77,6 +79,7 @@ def test_app_handles_transcription_error():
     config = Config(groq_api_key="test-key", min_duration=0.3)
 
     mock_recorder = MagicMock()
+    mock_recorder.is_silent.return_value = False
     mock_transcriber = MagicMock()
     mock_injector = MagicMock()
 
@@ -104,6 +107,7 @@ def test_app_handles_transcription_error():
 def test_app_reports_paste_failure():
     config = Config(groq_api_key="test-key")
     recorder = MagicMock()
+    recorder.is_silent.return_value = False
     transcriber = MagicMock()
     injector = MagicMock()
     recorder.stop.return_value = (io.BytesIO(b"data"), 1.0)
@@ -123,9 +127,15 @@ def test_app_reports_paste_failure():
 def test_app_ignores_new_recording_until_previous_transcription_finishes():
     from threading import Event
     gate = Event()
+    entered = Event()
     recorder = MagicMock()
+    recorder.is_silent.return_value = False
     transcriber = MagicMock()
-    transcriber.transcribe.side_effect = lambda audio: (gate.wait(2), "first")[1]
+    def delayed_transcription(audio):
+        entered.set()
+        assert gate.wait(3)
+        return "first"
+    transcriber.transcribe.side_effect = delayed_transcription
     recorder.stop.return_value = (io.BytesIO(b"data"), 1.0)
     injector = MagicMock()
     injector.paste_text.return_value = True
@@ -134,6 +144,7 @@ def test_app_ignores_new_recording_until_previous_transcription_finishes():
     app.on_hotkey_press()
     app.on_hotkey_release()
     try:
+        assert entered.wait(3)
         app.on_hotkey_press()
         app.on_hotkey_release()
         assert recorder.start.call_count == 1

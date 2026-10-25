@@ -4,6 +4,7 @@ from src.config import Config, load_config
 
 
 def test_load_config_defaults(monkeypatch):
+    monkeypatch.setattr("src.config.load_dotenv", lambda *args, **kwargs: None)
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
     monkeypatch.delenv("GROQ_MODEL", raising=False)
     monkeypatch.delenv("LANGUAGE", raising=False)
@@ -21,6 +22,7 @@ def test_load_config_defaults(monkeypatch):
 
 
 def test_load_config_from_env(monkeypatch):
+    monkeypatch.setattr("src.config.load_dotenv", lambda *args, **kwargs: None)
     monkeypatch.setenv("GROQ_API_KEY", "test-key")
     monkeypatch.setenv("GROQ_MODEL", "whisper-large-v3")
     monkeypatch.setenv("LANGUAGE", "en")

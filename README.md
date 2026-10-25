@@ -12,6 +12,7 @@ Công cụ Desktop chạy ngầm trên Windows chuyển giọng nói thành văn
 - **Không cướp tiêu điểm (Focus):** Badge overlay hiển thị ở cạnh dưới màn hình sử dụng thuộc tính Windows `WS_EX_NOACTIVATE`, không làm mất con trỏ chuột/dòng lệnh bạn đang gõ.
 - **Tự động làm sạch lệnh CLI:** Tự động loại bỏ dấu chấm câu thừa nếu bạn đọc các câu lệnh lập trình (như `git status`, `docker ps`, `npm run dev`).
 - **Không thay đổi Clipboard:** Gõ Unicode trực tiếp vào cửa sổ đang hoạt động; phím tắt `Right Ctrl` cũng được ứng dụng đích nhận như phím Ctrl thông thường.
+- **Nhập tiếng Việt trong Notepad:** Chèn trực tiếp tại con trỏ hoặc thay vùng chọn của control Edit/RichEdit để tránh lỗi Unicode đã tái hiện; các cửa sổ khác tiếp tục dùng `SendInput`.
 - **Hỗ trợ khay hệ thống (System Tray):** Biểu tượng nằm gọn ở góc đồng hồ Windows, cho phép kiểm tra trạng thái hoặc thoát app nhanh chóng bằng chuột phải.
 
 ---
@@ -39,14 +40,22 @@ GROQ_API_KEY=test-key
 Cài Python 3.10+ và các thư viện bằng `python -m pip install -r requirements.txt`.
 Không gửi API key cho người khác; âm thanh sẽ được gửi qua mạng đến Groq để phiên âm.
 
+Để dùng môi trường riêng trên PowerShell:
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe run.py
+```
+Nếu `.venv` đã được chuẩn bị, chỉ cần lệnh cuối. Bản sửa trong mã Python không tự cập nhật các file `.exe` cũ trong `dist`; hãy thoát bản cũ qua tray trước khi thử bản Python.
+
 ### Cách 1: Chạy trực tiếp qua Python
 - **Chế độ có cửa sổ hiển thị log:**
   ```bash
-  python run.py
+  .\.venv\Scripts\python.exe run.py
   ```
 - **Chế độ chạy ngầm hoàn toàn (không hiện cửa sổ đen):**
   ```bash
-  pythonw run.py
+  .\.venv\Scripts\pythonw.exe run.py
   ```
 
 ### Cách 2: Đóng gói thành file `VoiceToWord.exe` độc lập
@@ -68,10 +77,26 @@ File thực thi sẽ nằm tại `dist/VoiceToWord.exe`. Đặt file `.env` **c�
 
 Cửa sổ PowerShell/CMD chạy quyền Administrator có thể chặn thao tác nhập từ ứng dụng chạy quyền thông thường (UIPI); chỉ chạy VoiceToWord với cùng quyền nếu thực sự cần. Chưa kiểm chứng đường đi này trên máy hiện tại.
 
+### Khi nhận diện sai hoặc xuất hiện câu không nói
+
+- Đợi chỉ báo **Đang nghe** xuất hiện rồi mới nói, và giữ focus ở cửa sổ cần nhập đến khi xử lý xong.
+- App bỏ bản thu dưới `MIN_DURATION_SECONDS` và bản thu có dưới 100 ms vượt `SILENCE_THRESHOLD_DBFS` trước khi gọi Groq. Mức mặc định `-60` dBFS là điểm bắt đầu; thử cả im lặng và giọng nhỏ trên micro thật trước khi chỉnh. Bộ lọc năng lượng không phân biệt chắc chắn tiếng nói với nhạc hoặc nhiễu lớn.
+- App yêu cầu `verbose_json` và bỏ đoạn mà Whisper đánh giá đồng thời có xác suất không có lời nói cao (`no_speech_prob > 0.6`) và độ tin cậy thấp (`avg_logprob < -1.0`). Không có danh sách cấm câu “subscribe”; nội dung được nói thật vẫn được giữ. Xem [quy tắc im lặng của Whisper](https://github.com/openai/whisper/blob/main/whisper/transcribe.py).
+- Dùng `LANGUAGE=vi` cho tiếng Việt, `en` để đối chiếu tiếng Anh, hoặc `auto` để không ép ngôn ngữ. Khởi động lại app sau khi sửa `.env`.
+- Để xác định lỗi ở Groq, làm sạch hay nhập chữ, đặt `DEBUG_TRANSCRIPT=1` trong `.env`, chạy bản có console và đối chiếu `GROQ_RAW`, `CLEANED`, `INJECTOR_INPUT`, `INJECTOR_FINAL`. Đây là nội dung giọng nói: chỉ dùng câu mẫu không riêng tư, không chia sẻ log chứa thông tin nhạy cảm, và tắt lại khi thử xong. Mặc định app không ghi transcript/bản thu xuống đĩa và không hiển thị key trong lỗi API.
+- Lỗi kết nối/timeout không tự gửi lại; app báo lỗi và cho phép thu lượt mới. Lỗi micro/overflow yêu cầu thu lại. Chỉ mở một phiên: bản Python hiện có guard chặn mở trùng, nhưng exe cũ chưa có guard này nên vẫn cần thoát thủ công.
+
 ---
 
 ## 🧪 Chạy Kiểm thử (Tests)
 Chạy các kiểm thử đơn vị và tích hợp:
 ```bash
-python -m pytest -v
+.\.venv\Scripts\python.exe -m pytest -v
 ```
+
+Test `test_injector_types_vietnamese_into_real_text_window` mở cửa sổ riêng và gửi phím thật. Cần desktop đang hoạt động; không chạy lúc đang kiểm thử micro bằng một phiên app khác. Để chạy phần còn lại:
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q -k "not types_vietnamese_into_real_text_window"
+```
+
+Kết quả kiểm chứng và giới hạn: [báo cáo ngày 24/10/2026](docs/2026-10-24-stability-check.md). Bản thử `dist/VoiceToWord-test-2026-10-24.exe` đã được đóng gói và kiểm tra khởi động; hai `.exe` cũ chưa chứa bản sửa này.
