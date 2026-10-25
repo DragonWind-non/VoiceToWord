@@ -1,9 +1,10 @@
 import ctypes
+from ctypes import wintypes
 from enum import Enum
 import queue
 import threading
 import time
-from typing import Optional
+from typing import Optional, Tuple, Union, Any
 
 try:
     import tkinter as tk
@@ -27,6 +28,39 @@ SW_SHOWNOACTIVATE = 4
 SW_HIDE = 0
 
 
+def _setup_user32() -> None:
+    user32 = ctypes.windll.user32
+    user32.GetParent.argtypes = [wintypes.HWND]
+    user32.GetParent.restype = wintypes.HWND
+    user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.ShowWindow.restype = wintypes.BOOL
+
+    if hasattr(user32, "GetWindowLongPtrW"):
+        user32.GetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int]
+        user32.GetWindowLongPtrW.restype = ctypes.c_ssize_t
+        user32.SetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t]
+        user32.SetWindowLongPtrW.restype = ctypes.c_ssize_t
+    else:
+        user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
+        user32.GetWindowLongW.restype = ctypes.c_long
+        user32.SetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_long]
+        user32.SetWindowLongW.restype = ctypes.c_long
+
+
+def _get_window_long_ptr(hwnd: int, index: int) -> int:
+    user32 = ctypes.windll.user32
+    if hasattr(user32, "GetWindowLongPtrW"):
+        return user32.GetWindowLongPtrW(hwnd, index)
+    return user32.GetWindowLongW(hwnd, index)
+
+
+def _set_window_long_ptr(hwnd: int, index: int, value: int) -> int:
+    user32 = ctypes.windll.user32
+    if hasattr(user32, "SetWindowLongPtrW"):
+        return user32.SetWindowLongPtrW(hwnd, index, value)
+    return user32.SetWindowLongW(hwnd, index, value)
+
+
 class OverlayIndicator:
     """Floating non-focus-stealing pill badge indicator at the bottom-center of the screen."""
 
@@ -44,12 +78,12 @@ class OverlayIndicator:
         if not self.headless:
             self._start_gui_thread()
 
-    def _start_gui_thread(self):
+    def _start_gui_thread(self) -> None:
         self._is_running = True
         self._thread = threading.Thread(target=self._gui_loop, daemon=True)
         self._thread.start()
 
-    def _gui_loop(self):
+    def _gui_loop(self) -> None:
         self._root = tk.Tk()
         self._root.withdraw()
         self._root.overrideredirect(True)
@@ -80,19 +114,26 @@ class OverlayIndicator:
 
         # Set Windows WS_EX_NOACTIVATE style on the HWND to ensure it NEVER steals focus
         try:
+            _setup_user32()
             hwnd = ctypes.windll.user32.GetParent(self._root.winfo_id())
             if not hwnd:
                 hwnd = self._root.winfo_id()
-            style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            style = _get_window_long_ptr(hwnd, GWL_EXSTYLE)
             style |= (WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST)
-            ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
+            _set_window_long_ptr(hwnd, GWL_EXSTYLE, style)
         except Exception:
             pass
 
         self._check_queue()
-        self._root.mainloop()
+        try:
+            self._root.mainloop()
+        finally:
+            # Release Tk objects on the thread that owns their Tcl interpreter.
+            self._label = None
+            self._root = None
+            self._is_running = False
 
-    def _check_queue(self):
+    def _check_queue(self) -> None:
         if not self._root:
             return
 
@@ -116,10 +157,11 @@ class OverlayIndicator:
         if self._root:
             self._root.after(30, self._check_queue)
 
-    def _show_no_activate(self):
+    def _show_no_activate(self) -> None:
         if not self._root:
             return
         try:
+            _setup_user32()
             hwnd = ctypes.windll.user32.GetParent(self._root.winfo_id())
             if not hwnd:
                 hwnd = self._root.winfo_id()
@@ -127,7 +169,7 @@ class OverlayIndicator:
         except Exception:
             self._root.deiconify()
 
-    def _render_recording(self):
+    def _render_recording(self) -> None:
         if self._label and self._root:
             self._label.configure(
                 text="  🔴 Đang nghe (Nhả Ctrl để gửi)...",
@@ -135,7 +177,7 @@ class OverlayIndicator:
             )
             self._show_no_activate()
 
-    def _render_processing(self):
+    def _render_processing(self) -> None:
         if self._label and self._root:
             self._label.configure(
                 text="  ⏳ Đang nhận diện Groq AI...",
@@ -143,7 +185,11 @@ class OverlayIndicator:
             )
             self._show_no_activate()
 
-    def _render_error(self, message: str):
+    def _render_error(self, payload: Union[str, Tuple[str, int]]) -> None:
+        if isinstance(payload, tuple):
+            message, version = payload
+        else:
+            message, version = payload, self._error_version
         if self._label and self._root:
             self._label.configure(
                 text=f"  ❌ {message}",
@@ -151,42 +197,43 @@ class OverlayIndicator:
             )
             self._show_no_activate()
             # Auto hide error after 1.5s
-            version = self._error_version
             self._root.after(1500, lambda: self._hide_if_error(version))
 
-    def _hide_if_error(self, version):
+    def _hide_if_error(self, version: int) -> None:
         if self.state == OverlayState.ERROR and version == self._error_version:
             self.hide()
             self._render_hide()
 
-    def _render_hide(self):
+    def _render_hide(self) -> None:
         if self._root:
             self._root.withdraw()
 
     # Public API (Thread-safe)
-    def show_recording(self):
+    def show_recording(self) -> None:
         self.state = OverlayState.RECORDING
         if not self.headless:
             self._queue.put(("RECORDING", None))
 
-    def show_processing(self):
+    def show_processing(self) -> None:
         self.state = OverlayState.PROCESSING
         if not self.headless:
             self._queue.put(("PROCESSING", None))
 
-    def show_error(self, message: str):
+    def show_error(self, message: str) -> None:
         self._error_version += 1
         self.state = OverlayState.ERROR
         self.last_error = message
         if not self.headless:
-            self._queue.put(("ERROR", message))
+            self._queue.put(("ERROR", (message, self._error_version)))
 
-    def hide(self):
+    def hide(self) -> None:
         self.state = OverlayState.HIDDEN
         if not self.headless:
             self._queue.put(("HIDE", None))
 
-    def stop(self):
+    def stop(self) -> None:
         self.hide()
         if not self.headless:
             self._queue.put(("STOP", None))
+        if self._thread is not None and self._thread is not threading.current_thread():
+            self._thread.join(timeout=2)

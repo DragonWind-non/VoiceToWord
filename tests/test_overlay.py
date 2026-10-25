@@ -65,3 +65,31 @@ def test_old_error_timeout_does_not_hide_newer_error():
 
     assert indicator.state == OverlayState.ERROR
     indicator._root.withdraw.assert_not_called()
+
+
+def test_error_queue_carries_version_tuple():
+    indicator = OverlayIndicator(headless=True)
+    indicator.headless = False
+    indicator.show_error("e1")
+    indicator.show_error("e2")
+    action1, payload1 = indicator._queue.get_nowait()
+    action2, payload2 = indicator._queue.get_nowait()
+    assert action1 == "ERROR" and payload1 == ("e1", 1)
+    assert action2 == "ERROR" and payload2 == ("e2", 2)
+
+
+
+def test_real_gui_shutdown_releases_tk_on_its_own_thread():
+    import time
+    import sys
+    if sys.platform != "win32":
+        pytest.skip("Windows desktop overlay")
+    indicator = OverlayIndicator()
+    deadline = time.monotonic() + 3
+    while indicator._root is None and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert indicator._root is not None
+    indicator.stop()
+    assert not indicator._thread.is_alive()
+    assert indicator._root is None
+    assert indicator._label is None
