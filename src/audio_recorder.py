@@ -14,10 +14,13 @@ class AudioRecorder:
         self.frames: List[np.ndarray] = []
         self._start_time: float = 0.0
         self._stream: Optional[sd.InputStream] = None
+        self._audio_error: str = ""
 
     def _audio_callback(self, indata, frames_count, time_info, status):
         """Callback from sounddevice InputStream."""
         if self.is_recording:
+            if status and getattr(status, "input_overflow", False):
+                self._audio_error = "Audio input overflow"
             # Copy indata to avoid buffer overwrite
             self.frames.append(indata.copy())
 
@@ -27,6 +30,7 @@ class AudioRecorder:
             return
 
         self.frames = []
+        self._audio_error = ""
         self.is_recording = True
         self._start_time = time.time()
 
@@ -40,8 +44,32 @@ class AudioRecorder:
             self._stream.start()
         except Exception as e:
             self.is_recording = False
-            self._stream = None
+            try:
+                if self._stream is not None:
+                    self._stream.close()
+            finally:
+                self._stream = None
             raise RuntimeError(f"Failed to start audio stream: {e}") from e
+
+    def is_silent(self, threshold_dbfs: float = -60.0, data: Optional[np.ndarray] = None) -> bool:
+        """Require 100 ms above the noise floor, measured in 20 ms frames."""
+        if data is None:
+            if not self.frames:
+                return True
+            data = np.concatenate(self.frames, axis=0)
+        elif len(data) == 0:
+            return True
+        frame_size = max(1, round(self.sample_rate * 0.02))
+        active_samples = 0
+        threshold_ratio = 10 ** (threshold_dbfs / 20)
+        for offset in range(0, len(data), frame_size):
+            frame = data[offset:offset + frame_size].astype(np.float32)
+            frame = frame - frame.mean(axis=0)
+            rms = np.sqrt(np.mean(frame * frame)) / 32768.0
+            if rms > threshold_ratio:
+                active_samples += len(frame)
+        # shortcut: energy cannot distinguish loud background noise from speech; calibrate on the real microphone.
+        return active_samples < round(self.sample_rate * 0.1)
 
     def _export_wav_buffer(self) -> Tuple[io.BytesIO, float]:
         """Convert collected frames to an in-memory WAV buffer."""
@@ -73,13 +101,17 @@ class AudioRecorder:
 
         self.is_recording = False
 
-        if self._stream is not None:
+        stream, self._stream = self._stream, None
+        if stream is not None:
             try:
-                self._stream.stop()
-                self._stream.close()
-            except Exception:
-                pass
-            finally:
-                self._stream = None
+                try:
+                    stream.stop()
+                finally:
+                    stream.close()
+            except Exception as e:
+                raise RuntimeError(f"Failed to stop audio stream: {e}") from e
+
+        if self._audio_error:
+            raise RuntimeError(f"{self._audio_error}; please record again.")
 
         return self._export_wav_buffer()

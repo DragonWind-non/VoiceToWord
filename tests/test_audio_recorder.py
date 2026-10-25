@@ -44,3 +44,23 @@ def test_audio_recorder_empty_recording():
     wav_buffer, duration = recorder.stop()
     assert duration == 0.0
     assert wav_buffer.getbuffer().nbytes == 0
+
+
+def test_non_fatal_status_flags_do_not_abort_recording():
+    from types import SimpleNamespace
+    recorder = AudioRecorder(sample_rate=16000, channels=1)
+    recorder.is_recording = True
+    status = SimpleNamespace(input_overflow=False, input_underflow=True)
+    recorder._audio_callback(np.zeros((160, 1), dtype=np.int16), 160, None, status)
+    assert recorder._audio_error == ""
+    assert len(recorder.frames) == 1
+    wav_buffer, duration = recorder.stop()
+    assert duration > 0
+
+
+def test_is_silent_accepts_preconcatenated_data():
+    recorder = AudioRecorder(sample_rate=16000, channels=1)
+    data = np.zeros((16000, 1), dtype=np.int16)
+    recorder.frames = [data]
+    assert recorder.is_silent(-60.0, data=data)
+
