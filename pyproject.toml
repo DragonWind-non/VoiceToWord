@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voicetoword"
+version = "1.0.0"
+description = "Windows push-to-talk dictation with Groq Whisper"
+readme = "README.md"
+requires-python = ">=3.12"
+dynamic = ["dependencies"]
+classifiers = ["Operating System :: Microsoft :: Windows"]
+
+[project.gui-scripts]
+voicetoword = "voicetoword.main:main"
+
+[tool.setuptools]
+packages = ["voicetoword"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers"
+markers = ["desktop_input: sends real keystrokes and requires foreground focus"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]

@@ -1,7 +1,9 @@
+import logging
 import threading
 from typing import Callable, Optional
-from PIL import Image, ImageDraw
+
 import pystray
+from PIL import Image, ImageDraw
 
 
 def create_tray_icon_image() -> Image.Image:
@@ -26,8 +28,10 @@ def create_tray_icon_image() -> Image.Image:
 class TrayManager:
     """Manages the Windows notification area (System Tray) icon and context menu."""
 
-    def __init__(self, on_exit: Optional[Callable[[], None]] = None):
+    def __init__(self, on_exit: Optional[Callable[[], None]] = None,
+                 on_show_result: Optional[Callable[[], None]] = None):
         self.on_exit = on_exit or (lambda: None)
+        self.on_show_result = on_show_result or (lambda: None)
         self._icon: Optional[pystray.Icon] = None
         self._thread: Optional[threading.Thread] = None
 
@@ -35,6 +39,7 @@ class TrayManager:
         return pystray.Menu(
             pystray.MenuItem("VoiceToWord (Giữ Right Ctrl để nói)", None, enabled=False),
             pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Xem kết quả chưa nhập", lambda icon, item: self.on_show_result()),
             pystray.MenuItem("Thoát (Exit)", self._handle_exit),
         )
 
@@ -59,7 +64,7 @@ class TrayManager:
         if self._icon is not None:
             try:
                 self._icon.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logging.getLogger(__name__).warning("Failed to stop tray icon (%s)", type(e).__name__)
             finally:
                 self._icon = None

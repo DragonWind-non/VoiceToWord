@@ -11,6 +11,13 @@ ENV/
 
 # Environment Variables
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.log
 
 # Distribution / Packaging
 build/
@@ -28,10 +35,10 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-*.spec
 
 # Testing & Coverage
 .pytest_cache/
+.ruff_cache/
 .coverage
 htmlcov/
 
@@ -41,3 +48,8 @@ htmlcov/
 # Audio scratch
 *.wav
 *.mp3
+*.flac
+*.m4a
+*.ogg
+*.wma
+*.mp4

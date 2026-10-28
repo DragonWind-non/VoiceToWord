@@ -5,9 +5,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.injector import TextInjector
+from voicetoword.injector import TextInjector
 
 
+@pytest.mark.desktop_input
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows desktop input only")
 @pytest.mark.parametrize("text", [
     "Đây là đoạn nói thử nghiệm bằng tiếng Việt. OpenAI",
@@ -17,8 +18,8 @@ from src.injector import TextInjector
     "Xin chào 👋 — tiếng Việt 😀",
 ])
 def test_injector_types_vietnamese_into_real_text_window(text):
-    import tkinter as tk
     import time
+    import tkinter as tk
 
     try:
         root = tk.Tk()
@@ -63,7 +64,7 @@ def test_injector_types_vietnamese_into_real_text_window(text):
 
 
 def test_injector_flattens_control_whitespace(monkeypatch):
-    import src.injector as module
+    import voicetoword.injector as module
 
     observed = []
 
@@ -79,7 +80,7 @@ def test_injector_flattens_control_whitespace(monkeypatch):
 
 def test_injector_skips_empty_text(monkeypatch):
     send = MagicMock()
-    import src.injector as module
+    import voicetoword.injector as module
     monkeypatch.setattr(module.ctypes, "windll", SimpleNamespace(user32=SimpleNamespace(SendInput=send)))
 
     assert TextInjector().paste_text("") is False
@@ -88,14 +89,14 @@ def test_injector_skips_empty_text(monkeypatch):
 
 
 def test_injector_reports_typing_failure(monkeypatch):
-    import src.injector as module
+    import voicetoword.injector as module
     monkeypatch.setattr(module.ctypes, "windll", SimpleNamespace(user32=SimpleNamespace(SendInput=lambda *args: 0)))
 
     assert TextInjector().paste_text("text") is False
 
 
 def test_injector_does_not_send_backspace_escape_or_null(monkeypatch):
-    import src.injector as module
+    import voicetoword.injector as module
     scans = []
     def capture(count, events, size):
         scans.extend(events[i].value.ki.wScan for i in range(0, count, 2))
@@ -106,7 +107,7 @@ def test_injector_does_not_send_backspace_escape_or_null(monkeypatch):
 
 
 def test_injector_rejects_invalid_unicode_without_sending(monkeypatch):
-    import src.injector as module
+    import voicetoword.injector as module
     send = MagicMock()
     monkeypatch.setattr(module.ctypes, "windll", SimpleNamespace(user32=SimpleNamespace(SendInput=send)))
     assert TextInjector().paste_text("invalid \ud800") is False
@@ -114,9 +115,10 @@ def test_injector_rejects_invalid_unicode_without_sending(monkeypatch):
 
 
 def native_edit_api(monkeypatch, control="RichEditD2DPT", delivered=1, focuses=(777, 777)):
-    import src.injector as module
+    import voicetoword.injector as module
     focus_values = iter(focuses)
     inserted = []
+    caret = 0
 
     def gui_info(thread, pointer):
         info = ctypes.cast(pointer, ctypes.POINTER(module.GUITHREADINFO)).contents
@@ -128,15 +130,25 @@ def native_edit_api(monkeypatch, control="RichEditD2DPT", delivered=1, focuses=(
         return len(control)
 
     def replace(hwnd, message, undoable, pointer, flags, timeout, result):
-        assert hwnd == 777 and message == 0xC2 and undoable == 1
+        nonlocal caret
+        assert hwnd == 777
         assert flags & 2 and timeout <= 1000
-        inserted.append(ctypes.wstring_at(pointer))
+        if message == 0xC2:
+            assert undoable == 1
+            text = ctypes.wstring_at(pointer)
+            inserted.append(text)
+            caret += len(text.encode("utf-16le")) // 2
+        elif message == 0xB0:
+            ctypes.cast(undoable, ctypes.POINTER(ctypes.wintypes.DWORD)).contents.value = caret
+            ctypes.cast(pointer, ctypes.POINTER(ctypes.wintypes.DWORD)).contents.value = caret
+        ctypes.cast(result, ctypes.POINTER(ctypes.c_size_t)).contents.value = 1000000 if message == 0xD5 else caret
         return delivered
 
     api = SimpleNamespace(
         GetGUIThreadInfo=MagicMock(side_effect=gui_info),
         GetClassNameW=MagicMock(side_effect=class_name),
         IsWindowUnicode=MagicMock(return_value=1),
+        GetWindowLongW=MagicMock(return_value=0),
         SendMessageTimeoutW=MagicMock(side_effect=replace),
         SendInput=MagicMock(side_effect=lambda count, events, size: count),
     )
@@ -172,7 +184,7 @@ def test_other_controls_keep_unicode_keyboard_input(monkeypatch):
 
 
 def test_injector_sendinput_events_indexed_correctly(monkeypatch):
-    import src.injector as module
+    import voicetoword.injector as module
 
     captured = []
 

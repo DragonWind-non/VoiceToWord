@@ -1,14 +1,16 @@
 import io
 import time
 from unittest.mock import MagicMock
+
 import pytest
-from src.config import Config
-from src.main import VoiceToWordApp
-from src.overlay import OverlayState
-from src.transcriber import TranscribeError
+
+from voicetoword.app import VoiceToWordApp
+from voicetoword.config import Config
+from voicetoword.overlay import OverlayState
+from voicetoword.transcriber import TranscribeError
 
 
-def test_app_lifecycle_success():
+def test_app_lifecycle_success(start_recording):
     config = Config(groq_api_key="test-key", min_duration=0.3)
 
     mock_recorder = MagicMock()
@@ -25,7 +27,7 @@ def test_app_lifecycle_success():
     )
 
     # 1. User presses Right Ctrl
-    app.on_hotkey_press()
+    start_recording(app)
     mock_recorder.start.assert_called_once()
     assert app.overlay.state == OverlayState.RECORDING
 
@@ -45,7 +47,7 @@ def test_app_lifecycle_success():
     assert app.overlay.state == OverlayState.HIDDEN
 
 
-def test_app_debounce_under_min_duration():
+def test_app_debounce_under_min_duration(start_recording):
     config = Config(groq_api_key="test-key", min_duration=0.3)
 
     mock_recorder = MagicMock()
@@ -61,7 +63,7 @@ def test_app_debounce_under_min_duration():
         headless=True,
     )
 
-    app.on_hotkey_press()
+    start_recording(app)
     assert app.overlay.state == OverlayState.RECORDING
 
     # Key released in 0.1s (accidental tap < 0.3s)
@@ -75,7 +77,7 @@ def test_app_debounce_under_min_duration():
     assert app.overlay.state == OverlayState.HIDDEN
 
 
-def test_app_handles_transcription_error():
+def test_app_handles_transcription_error(start_recording):
     config = Config(groq_api_key="test-key", min_duration=0.3)
 
     mock_recorder = MagicMock()
@@ -93,7 +95,7 @@ def test_app_handles_transcription_error():
         headless=True,
     )
 
-    app.on_hotkey_press()
+    start_recording(app)
     mock_recorder.stop.return_value = (io.BytesIO(b"data"), 1.0)
 
     app.on_hotkey_release()
@@ -104,7 +106,7 @@ def test_app_handles_transcription_error():
     mock_injector.paste_text.assert_not_called()
 
 
-def test_app_reports_paste_failure():
+def test_app_reports_paste_failure(start_recording):
     config = Config(groq_api_key="test-key")
     recorder = MagicMock()
     recorder.is_silent.return_value = False
@@ -116,7 +118,7 @@ def test_app_reports_paste_failure():
     app = VoiceToWordApp(config=config, recorder=recorder, transcriber=transcriber,
                          injector=injector, headless=True)
 
-    app.on_hotkey_press()
+    start_recording(app)
     app.on_hotkey_release()
     time.sleep(0.1)
 
@@ -124,7 +126,7 @@ def test_app_reports_paste_failure():
     assert app.overlay.last_error
 
 
-def test_app_ignores_new_recording_until_previous_transcription_finishes():
+def test_app_ignores_new_recording_until_previous_transcription_finishes(start_recording):
     from threading import Event
     gate = Event()
     entered = Event()
@@ -141,7 +143,7 @@ def test_app_ignores_new_recording_until_previous_transcription_finishes():
     injector.paste_text.return_value = True
     app = VoiceToWordApp(config=Config(groq_api_key="valid"), recorder=recorder,
                          transcriber=transcriber, injector=injector, headless=True)
-    app.on_hotkey_press()
+    start_recording(app)
     app.on_hotkey_release()
     try:
         assert entered.wait(3)
@@ -163,7 +165,7 @@ def test_app_start_without_console_streams(monkeypatch):
 
 
 def test_main_missing_key_shows_message_in_desktop_mode(monkeypatch):
-    import src.main as module
+    import voicetoword.main as module
     monkeypatch.setattr(module, "load_config", lambda: Config(groq_api_key=""))
     notice = MagicMock()
     monkeypatch.setattr(module, "notify_missing_key", notice)

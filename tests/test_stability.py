@@ -4,16 +4,16 @@ import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import httpx
 import numpy as np
 import pytest
-import httpx
 from groq import Groq
 
-from src.audio_recorder import AudioRecorder
-from src.config import Config, load_config
-from src.main import VoiceToWordApp
-from src.overlay import OverlayIndicator, OverlayState
-from src.transcriber import TranscribeError, Transcriber
+from voicetoword.app import VoiceToWordApp
+from voicetoword.audio_recorder import AudioRecorder
+from voicetoword.config import Config, load_config
+from voicetoword.overlay import OverlayIndicator, OverlayState
+from voicetoword.transcriber import TranscribeError, Transcriber
 
 
 def tone(seconds=0.2, amplitude=100):
@@ -57,7 +57,7 @@ def test_stream_is_closed_when_audio_operation_fails(monkeypatch, operation):
     stream = MagicMock()
     stream.start.side_effect = RuntimeError("device unavailable") if operation == "start" else None
     stream.stop.side_effect = RuntimeError("device disconnected") if operation == "stop" else None
-    monkeypatch.setattr("src.audio_recorder.sd.InputStream", lambda **kwargs: stream)
+    monkeypatch.setattr("voicetoword.audio_recorder.sd.InputStream", lambda **kwargs: stream)
     recorder = AudioRecorder()
     with pytest.raises(RuntimeError):
         recorder.start()
@@ -68,7 +68,7 @@ def test_stream_is_closed_when_audio_operation_fails(monkeypatch, operation):
 
 
 def test_overflow_is_reported_instead_of_sending_damaged_audio(monkeypatch):
-    monkeypatch.setattr("src.audio_recorder.sd.InputStream", MagicMock())
+    monkeypatch.setattr("voicetoword.audio_recorder.sd.InputStream", MagicMock())
     recorder = AudioRecorder()
     recorder.start()
     recorder._audio_callback(tone(), 3200, None, SimpleNamespace(input_overflow=True))
@@ -88,10 +88,10 @@ def make_app(recorder=None, transcriber=None, injector=None):
     )
 
 
-def test_digital_silence_never_reaches_cloud_or_injector(monkeypatch):
-    monkeypatch.setattr("src.audio_recorder.sd.InputStream", MagicMock())
+def test_digital_silence_never_reaches_cloud_or_injector(monkeypatch, start_recording):
+    monkeypatch.setattr("voicetoword.audio_recorder.sd.InputStream", MagicMock())
     app = make_app(recorder=AudioRecorder())
-    app.on_hotkey_press()
+    start_recording(app)
     app.recorder.frames = [np.zeros((16000, 1), dtype=np.int16)]
     app.on_hotkey_release()
     if getattr(app, "_worker_thread", None):
@@ -102,7 +102,7 @@ def test_digital_silence_never_reaches_cloud_or_injector(monkeypatch):
     assert not app._busy
 
 
-def test_hotkey_release_returns_immediately_even_if_audio_stop_blocks():
+def test_hotkey_release_returns_immediately_even_if_audio_stop_blocks(start_recording):
     import time
     stop_entered = threading.Event()
     stop_gate = threading.Event()
@@ -116,7 +116,7 @@ def test_hotkey_release_returns_immediately_even_if_audio_stop_blocks():
     recorder.stop.side_effect = slow_stop
     recorder.is_silent.return_value = False
     app = make_app(recorder=recorder)
-    app.on_hotkey_press()
+    start_recording(app)
 
     start_time = time.monotonic()
     app.on_hotkey_release()
@@ -129,7 +129,7 @@ def test_hotkey_release_returns_immediately_even_if_audio_stop_blocks():
         app._worker_thread.join(timeout=1)
 
 
-def test_state_lock_is_not_held_during_text_injection():
+def test_state_lock_is_not_held_during_text_injection(start_recording):
     import time
     paste_entered = threading.Event()
     paste_gate = threading.Event()
@@ -142,7 +142,7 @@ def test_state_lock_is_not_held_during_text_injection():
     injector = MagicMock()
     injector.paste_text.side_effect = slow_paste
     app = make_app(injector=injector)
-    app.on_hotkey_press()
+    start_recording(app)
     app.on_hotkey_release()
 
     assert paste_entered.wait(2)
@@ -184,7 +184,7 @@ def test_stop_discards_inflight_response():
 
 def test_worker_start_failure_does_not_leave_app_busy(monkeypatch):
     app = make_app()
-    monkeypatch.setattr("src.main.threading.Thread", MagicMock(return_value=SimpleNamespace(
+    monkeypatch.setattr("voicetoword.app.threading.Thread", MagicMock(return_value=SimpleNamespace(
         start=MagicMock(side_effect=RuntimeError("no thread")),
     )))
     app.on_hotkey_press()
@@ -192,7 +192,9 @@ def test_worker_start_failure_does_not_leave_app_busy(monkeypatch):
     assert not app._busy
     assert app.overlay.state == OverlayState.ERROR
     app.on_hotkey_press()
-    assert app.recorder.start.call_count == 2
+    app.recorder.start.assert_not_called()
+    assert app._worker_thread is None
+    app.stop()
 
 
 def test_stop_cleans_other_services_even_if_recorder_raises():
@@ -267,14 +269,14 @@ def test_auto_language_is_omitted_from_request():
 
 def test_transcript_logging_is_opt_in_even_at_debug_level(caplog):
     transcriber = transcription("PRIVATE_TRANSCRIPT")
-    with caplog.at_level(logging.DEBUG, logger="src.transcriber"):
+    with caplog.at_level(logging.DEBUG, logger="voicetoword.transcriber"):
         assert transcriber.transcribe(io.BytesIO(b"wav")) == "PRIVATE_TRANSCRIPT"
     assert "PRIVATE_TRANSCRIPT" not in caplog.text
 
 
 def test_enabled_diagnostics_preserve_raw_before_cleaning(caplog):
     transcriber = transcription("  git status.  ", debug_transcript=True)
-    with caplog.at_level(logging.DEBUG, logger="src.transcriber"):
+    with caplog.at_level(logging.DEBUG, logger="voicetoword.transcriber"):
         assert transcriber.transcribe(io.BytesIO(b"wav")) == "git status"
     assert repr("  git status.  ") in caplog.text
     assert repr("git status") in caplog.text
@@ -298,7 +300,7 @@ def test_api_error_does_not_echo_secret():
     ("SILENCE_THRESHOLD_DBFS", "2", "silence_threshold_dbfs", -60.0),
 ])
 def test_invalid_numeric_config_falls_back(monkeypatch, name, value, attribute, expected):
-    monkeypatch.setattr("src.config.load_dotenv", lambda *args, **kwargs: None)
+    monkeypatch.setattr("voicetoword.config.load_dotenv", lambda *args, **kwargs: None)
     monkeypatch.setenv(name, value)
     assert getattr(load_config(), attribute) == expected
 
@@ -343,7 +345,7 @@ def test_real_sdk_error_is_private_and_next_request_recovers(failure, caplog):
 
 @pytest.mark.parametrize("existing", [False, True])
 def test_single_instance_releases_handle(monkeypatch, existing):
-    import src.main as module
+    import voicetoword.main as module
     kernel = SimpleNamespace(CreateMutexW=MagicMock(return_value=123), CloseHandle=MagicMock())
     monkeypatch.setattr("ctypes.WinDLL", lambda *args, **kwargs: kernel)
     monkeypatch.setattr("ctypes.get_last_error", lambda: 183 if existing else 0)
@@ -358,7 +360,7 @@ def test_single_instance_releases_handle(monkeypatch, existing):
 
 
 def test_single_instance_creation_failure_is_not_ignored(monkeypatch):
-    import src.main as module
+    import voicetoword.main as module
     kernel = SimpleNamespace(CreateMutexW=MagicMock(return_value=0), CloseHandle=MagicMock())
     monkeypatch.setattr("ctypes.WinDLL", lambda *args, **kwargs: kernel)
     with pytest.raises(RuntimeError):

@@ -60,6 +60,9 @@ def _setup_user32() -> None:
     if hasattr(user32, "IsWindowUnicode"):
         user32.IsWindowUnicode.argtypes = (wintypes.HWND,)
         user32.IsWindowUnicode.restype = wintypes.BOOL
+    if hasattr(user32, "GetWindowLongW"):
+        user32.GetWindowLongW.argtypes = (wintypes.HWND, ctypes.c_int)
+        user32.GetWindowLongW.restype = wintypes.LONG
     if hasattr(user32, "SendMessageTimeoutW"):
         user32.SendMessageTimeoutW.argtypes = (
             wintypes.HWND, wintypes.UINT, ctypes.c_size_t, ctypes.c_void_p,
@@ -70,8 +73,8 @@ def _setup_user32() -> None:
 
 try:
     _setup_user32()
-except Exception:
-    pass
+except Exception as e:
+    logging.getLogger(__name__).warning("Win32 input setup failed (%s)", type(e).__name__)
 
 
 class TextInjector:
@@ -94,16 +97,42 @@ class TextInjector:
             return None
         if not user32.IsWindowUnicode(info.hwndFocus):
             return None
+        if user32.GetWindowLongW(info.hwndFocus, -16) & 0x800:  # ES_READONLY
+            return False
+
+        def send(message: int, wparam: int = 0, lparam: Optional[int] = None) -> Optional[int]:
+            result = ctypes.c_size_t()
+            if user32.SendMessageTimeoutW(info.hwndFocus, message, wparam, lparam, 0x22, 1000, ctypes.byref(result)):
+                return result.value
+            return None
+
+        length = send(0xE)  # WM_GETTEXTLENGTH
+        limit = send(0xD5)  # EM_GETLIMITTEXT
+        start, end = wintypes.DWORD(), wintypes.DWORD()
+        selection = send(0xB0, ctypes.addressof(start), ctypes.addressof(end))  # EM_GETSEL
+        units = len(text.encode("utf-16le")) // 2
+        if length is None or limit is None or selection is None:
+            return False
+        if control.startswith("richedit") and length - (end.value - start.value) + units > limit:
+            # RichEdit selection offsets count CRLF as one character; WM_GETTEXTLENGTH counts two.
+            contents = ctypes.create_unicode_buffer(length + 1)
+            copied = send(0xD, length + 1, ctypes.addressof(contents))  # WM_GETTEXT
+            if copied is None or copied < length:
+                return False
+            length -= contents.value.count("\r\n")
+        if not 0 <= start.value <= end.value <= length or length - (end.value - start.value) + units > limit:
+            return False
         current = GUITHREADINFO(cbSize=ctypes.sizeof(GUITHREADINFO))
         if not user32.GetGUIThreadInfo(0, ctypes.byref(current)) or current.hwndFocus != info.hwndFocus:
             return False
         buffer = ctypes.create_unicode_buffer(text)
-        result = ctypes.c_size_t()
         # RichEdit corrupted queued VK_PACKET input in live tests; insert at its caret directly.
-        return bool(user32.SendMessageTimeoutW(
-            info.hwndFocus, 0xC2, 1, ctypes.cast(buffer, ctypes.c_void_p),
-            0x22, 1000, ctypes.byref(result),
-        ))
+        if send(0xC2, 1, ctypes.addressof(buffer)) is None:  # EM_REPLACESEL
+            return False
+        expected_caret = start.value + units
+        if send(0xB0, ctypes.addressof(start), ctypes.addressof(end)) is None:
+            return False
+        return start.value == end.value == expected_caret
 
     def paste_text(self, text: str) -> bool:
         """Send Unicode characters in order without touching the clipboard."""

@@ -1,9 +1,10 @@
 import io
 import time
 import wave
+
 import numpy as np
-import pytest
-from src.audio_recorder import AudioRecorder
+
+from voicetoword.audio_recorder import AudioRecorder
 
 
 def test_audio_recorder_init():

@@ -1,8 +1,10 @@
 import io
 from unittest.mock import MagicMock
+
 import pytest
-from src.config import Config
-from src.transcriber import Transcriber, TranscribeError, clean_transcription
+
+from voicetoword.config import Config
+from voicetoword.transcriber import TranscribeError, Transcriber, clean_transcription
 
 
 def test_clean_transcription_cli_commands():
@@ -50,7 +52,7 @@ def test_transcribe_handles_segments_with_missing_or_none_text():
     buffer = io.BytesIO(b"fake wav data")
     buffer.name = "audio.wav"
     result = transcriber.transcribe(buffer)
-    assert result == "valid command"
+    assert result == "fallback text"
 
 
 
@@ -59,6 +61,19 @@ def test_transcriber_requires_valid_key():
     transcriber = Transcriber(config)
     with pytest.raises(TranscribeError, match="GROQ_API_KEY is not configured"):
         transcriber.transcribe(io.BytesIO(b"dummy"))
+
+
+def test_client_cannot_redirect_credentials_via_environment(monkeypatch):
+    monkeypatch.setenv("GROQ_BASE_URL", "https://example.invalid")
+    transcriber = Transcriber(Config(groq_api_key="test-key"))
+    try:
+        client = transcriber._get_client()
+        assert str(client.base_url).rstrip("/") == "https://api.groq.com"
+        assert client.max_retries == 0
+        assert transcriber._get_client() is client
+    finally:
+        if transcriber._client:
+            transcriber._client.close()
 
 
 def test_transcriber_success(monkeypatch):

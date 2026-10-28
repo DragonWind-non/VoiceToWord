@@ -1,14 +1,15 @@
-from dataclasses import dataclass
 import math
 import os
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 
 @dataclass
 class Config:
-    groq_api_key: str = ""
+    groq_api_key: str = field(default="", repr=False)
     model_name: str = "whisper-large-v3-turbo"
     language: str = "vi"
     hotkey: str = "ctrl_r"
@@ -19,12 +20,15 @@ class Config:
 
     def is_valid(self) -> bool:
         """Returns True if minimum required settings (GROQ API KEY) are set."""
-        return bool(self.groq_api_key and self.groq_api_key.strip())
+        key = self.groq_api_key.strip()
+        return bool(key) and key != "your_groq_api_key_here"
 
 
 def load_config() -> Config:
     """Load configuration from environment variables with sensible defaults."""
     app_dir = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent.parent
+    if not getattr(sys, "frozen", False) and not (app_dir / "run.py").is_file():
+        app_dir = Path.cwd()
     load_dotenv(app_dir / ".env", override=False)
     api_key = os.getenv("GROQ_API_KEY", "").strip()
     model = os.getenv("GROQ_MODEL", "whisper-large-v3-turbo").strip()

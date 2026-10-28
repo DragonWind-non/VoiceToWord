@@ -1,0 +1,22 @@
+VoiceToWord 1.0.0 — Windows x64
+
+1. Giải nén ZIP vào thư mục riêng.
+2. Sao chép .env.example thành .env bên cạnh VoiceToWord-1.0.0.exe.
+3. Mở .env bằng Notepad, thay your_groq_api_key_here bằng Groq API key của bạn rồi lưu.
+4. Mở exe. Chọn cửa sổ cần nhập, giữ Right Ctrl, đợi “Đang nghe”, nói rồi nhả phím.
+5. Giữ focus ở cửa sổ đích cho đến khi chữ được nhập.
+6. Thoát: chuột phải biểu tượng micro cạnh đồng hồ → Thoát (Exit).
+
+Lấy khóa tại https://console.groq.com/keys. Âm thanh được gửi qua mạng đến Groq để nhận diện.
+Không chia sẻ .env, API key, bản thu hoặc nội dung riêng tư. Gói tải về không có API key.
+Mặc định không lưu bản thu/transcript ra đĩa. Giữ DEBUG_TRANSCRIPT=0 khi sử dụng thông thường.
+Khi nhập thất bại: tray → Xem kết quả chưa nhập, kiểm tra rồi tự sao chép nếu cần.
+Ứng dụng không tự nhấn Enter. Chỉ mở một phiên; thoát phiên cũ trước khi cập nhật.
+
+Kiểm tra file: dùng Get-FileHash .\VoiceToWord-1.0.0.exe -Algorithm SHA256 trong PowerShell,
+đối chiếu SHA256SUMS.txt. Exe chưa ký số; checksum xác minh toàn vẹn so với bản phát hành.
+
+Các kiểm tra tự động và archive không thay thế thử micro, mạng, độ chính xác Groq, cửa sổ đích
+và sử dụng dài hạn trên máy của bạn. Bộ lọc năng lượng cần hiệu chỉnh theo micro thực tế.
+
+Mã nguồn và tài liệu: https://github.com/DragonWind-non/VoiceToWord

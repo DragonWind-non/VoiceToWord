@@ -1,7 +1,8 @@
 from unittest.mock import MagicMock
+
 from pynput.keyboard import Key, KeyCode
-import pytest
-from src.hotkey_listener import HotkeyListener
+
+from voicetoword.hotkey_listener import HotkeyListener
 
 
 def test_hotkey_listener_press_and_release():

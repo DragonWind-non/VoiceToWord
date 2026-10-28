@@ -1,10 +1,8 @@
-import os
-import pytest
-from src.config import Config, load_config
+from voicetoword.config import Config, load_config
 
 
 def test_load_config_defaults(monkeypatch):
-    monkeypatch.setattr("src.config.load_dotenv", lambda *args, **kwargs: None)
+    monkeypatch.setattr("voicetoword.config.load_dotenv", lambda *args, **kwargs: None)
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
     monkeypatch.delenv("GROQ_MODEL", raising=False)
     monkeypatch.delenv("LANGUAGE", raising=False)
@@ -22,7 +20,7 @@ def test_load_config_defaults(monkeypatch):
 
 
 def test_load_config_from_env(monkeypatch):
-    monkeypatch.setattr("src.config.load_dotenv", lambda *args, **kwargs: None)
+    monkeypatch.setattr("voicetoword.config.load_dotenv", lambda *args, **kwargs: None)
     monkeypatch.setenv("GROQ_API_KEY", "test-key")
     monkeypatch.setenv("GROQ_MODEL", "whisper-large-v3")
     monkeypatch.setenv("LANGUAGE", "en")
@@ -41,7 +39,8 @@ def test_load_config_from_env(monkeypatch):
 
 def test_load_config_reads_env_beside_packaged_executable(monkeypatch, tmp_path):
     import sys
-    import src.config as module
+
+    import voicetoword.config as module
 
     exe = tmp_path / "VoiceToWord.exe"
     (tmp_path / ".env").write_text("GROQ_API_KEY=test-key\n", encoding="utf-8")
@@ -58,3 +57,21 @@ def test_config_is_valid():
 
     cfg_valid = Config(groq_api_key="valid_key")
     assert cfg_valid.is_valid()
+
+
+def test_config_repr_never_contains_api_key():
+    assert "private-sentinel" not in repr(Config(groq_api_key="private-sentinel"))
+
+
+def test_example_key_is_not_accepted():
+    assert not Config(groq_api_key="your_groq_api_key_here").is_valid()
+
+
+def test_installed_package_reads_configuration_from_working_directory(monkeypatch, tmp_path):
+    import voicetoword.config as module
+
+    monkeypatch.setattr(module, "__file__", str(tmp_path / "site-packages/voicetoword/config.py"))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    (tmp_path / ".env").write_text("GROQ_API_KEY=installed-test-key\n", encoding="utf-8")
+    assert load_config().groq_api_key == "installed-test-key"

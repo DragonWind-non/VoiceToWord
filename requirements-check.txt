@@ -1,0 +1,4 @@
+# Audit tools stay out of the application and its executable.
+ruff==0.17.3
+bandit==1.9.4
+pip-audit==2.10.1

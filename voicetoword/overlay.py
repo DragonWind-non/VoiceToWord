@@ -1,10 +1,10 @@
 import ctypes
-from ctypes import wintypes
-from enum import Enum
+import logging
 import queue
 import threading
-import time
-from typing import Optional, Tuple, Union, Any
+from ctypes import wintypes
+from enum import Enum
+from typing import Any, Optional, Tuple, Union
 
 try:
     import tkinter as tk
@@ -53,8 +53,8 @@ def _setup_user32() -> None:
 
 try:
     _setup_user32()
-except Exception:
-    pass
+except Exception as e:
+    logging.getLogger(__name__).warning("Win32 overlay setup failed (%s)", type(e).__name__)
 
 
 def _get_window_long_ptr(hwnd: int, index: int) -> int:
@@ -83,6 +83,7 @@ class OverlayIndicator:
         self._thread: Optional[threading.Thread] = None
         self._root = None
         self._label = None
+        self._result_window = None
         self._is_running = False
 
         if not self.headless:
@@ -122,24 +123,13 @@ class OverlayIndicator:
         y = screen_h - 110
         self._root.geometry(f"{width}x{height}+{x}+{y}")
 
-        # Set Windows WS_EX_NOACTIVATE style on the HWND to ensure it NEVER steals focus
-        try:
-            _setup_user32()
-            hwnd = ctypes.windll.user32.GetParent(self._root.winfo_id())
-            if not hwnd:
-                hwnd = self._root.winfo_id()
-            style = _get_window_long_ptr(hwnd, GWL_EXSTYLE)
-            style |= (WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST)
-            _set_window_long_ptr(hwnd, GWL_EXSTYLE, style)
-        except Exception:
-            pass
-
         self._check_queue()
         try:
             self._root.mainloop()
         finally:
             # Release Tk objects on the thread that owns their Tcl interpreter.
             self._label = None
+            self._result_window = None
             self._root = None
             self._is_running = False
 
@@ -158,6 +148,10 @@ class OverlayIndicator:
                     self._render_error(payload)
                 elif action == "HIDE":
                     self._render_hide()
+                elif action == "RESULT":
+                    self._render_result(payload)
+                elif action == "CLEAR_RESULT":
+                    self._render_clear_result()
                 elif action == "STOP":
                     self._root.destroy()
                     return
@@ -171,9 +165,13 @@ class OverlayIndicator:
         if not self._root:
             return
         try:
+            _setup_user32()
             hwnd = ctypes.windll.user32.GetParent(self._root.winfo_id())
             if not hwnd:
                 hwnd = self._root.winfo_id()
+            # Tk can recreate its wrapper HWND; apply styles immediately before showing it.
+            style = _get_window_long_ptr(hwnd, GWL_EXSTYLE)
+            _set_window_long_ptr(hwnd, GWL_EXSTYLE, style | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST)
             ctypes.windll.user32.ShowWindow(hwnd, SW_SHOWNOACTIVATE)
         except Exception:
             self._root.deiconify()
@@ -217,6 +215,30 @@ class OverlayIndicator:
         if self._root:
             self._root.withdraw()
 
+    def _render_clear_result(self) -> None:
+        if self._result_window is not None and self._result_window.winfo_exists():
+            self._result_window.destroy()
+        self._result_window = None
+
+    def _render_result(self, text: str) -> None:
+        self._render_clear_result()
+        window = tk.Toplevel(self._root)
+        self._result_window = window
+        window.title("VoiceToWord — Kết quả chưa nhập")
+        window.geometry("600x260")
+        tk.Label(window, text="Chọn văn bản và nhấn Ctrl+C để sao chép thủ công.").pack(padx=12, pady=8)
+        box = tk.Text(window, wrap="word", font=("Segoe UI", 11), padx=8, pady=8)
+        box.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+        box.insert("1.0", text)
+        box.configure(state="disabled")
+
+        def select_all(event: Any) -> str:
+            box.tag_add("sel", "1.0", "end-1c")
+            return "break"
+
+        box.bind("<<SelectAll>>", select_all)
+        box.focus_set()
+
     # Public API (Thread-safe)
     def show_recording(self) -> None:
         self.state = OverlayState.RECORDING
@@ -239,6 +261,14 @@ class OverlayIndicator:
         self.state = OverlayState.HIDDEN
         if not self.headless:
             self._queue.put(("HIDE", None))
+
+    def show_result(self, text: str) -> None:
+        if not self.headless:
+            self._queue.put(("RESULT", text))
+
+    def clear_result(self) -> None:
+        if not self.headless:
+            self._queue.put(("CLEAR_RESULT", None))
 
     def stop(self) -> None:
         self.hide()
