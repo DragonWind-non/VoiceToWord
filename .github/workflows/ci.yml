@@ -24,7 +24,7 @@ jobs:
       - run: python -m pip check
       - run: python -m ruff check voicetoword tests scripts run.py
       - run: python -m bandit -q -r voicetoword run.py
-      - run: python -m pip_audit --no-deps --disable-pip -r requirements-dev.txt
+      - run: python -m pip_audit --no-deps --disable-pip -r requirements.txt -r requirements-dev.txt
       - run: python -m pytest -q -m 'not desktop_input'
       - name: Scan complete Git history for secrets
         shell: pwsh

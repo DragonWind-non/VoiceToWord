@@ -26,7 +26,7 @@ Môi trường: Windows x64, Python 3.14.7; cài mới môi trường kiểm ch�
 | Ruff 0.17.3 | **PASS** | Package, test, script và điểm vào |
 | Bandit 1.9.4 | **0 findings** | Package runtime và `run.py`; script build được rà lệnh/path và có test riêng |
 | pip check | **PASS** | Môi trường cài mới |
-| pip-audit 2.10.1 | **0 known vulnerabilities** | 23 runtime + 12 test/build dependency được quét ở hai báo cáo; không bỏ qua CVE |
+| pip-audit 2.10.1 | **0 known vulnerabilities** | 35 dependency gồm runtime và test/build; truyền cả hai requirements để không bỏ qua file include khi dùng `--disable-pip`; không bỏ qua CVE |
 | Gitleaks 8.30.1 | **0 findings** | Toàn bộ lịch sử sau làm sạch và bản xuất mã nguồn; không dùng baseline/allowlist |
 | So sánh API key cục bộ | **0 matches** | Blob Git lịch sử, nội dung ZIP, mục exe và module PYZ đã giải nén |
 | Quét email/đường dẫn cá nhân | **0 matches** | Email cá nhân và đường dẫn hồ sơ Windows được kiểm tra trong gói công khai |

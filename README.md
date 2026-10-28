@@ -65,7 +65,7 @@ requirements-dev.txt / requirements-check.txt  Test/build và công cụ audit
 .\.venv\Scripts\python.exe -m pytest -q -m "not desktop_input"
 .\.venv\Scripts\python.exe -m ruff check voicetoword tests scripts run.py
 .\.venv\Scripts\python.exe -m bandit -q -r voicetoword run.py
-.\.venv\Scripts\python.exe -m pip_audit --no-deps --disable-pip -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pip_audit --no-deps --disable-pip -r requirements.txt -r requirements-dev.txt
 .\.venv\Scripts\python.exe scripts/release.py
 ```
 
